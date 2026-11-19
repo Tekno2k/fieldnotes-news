@@ -39,15 +39,12 @@ FEEDS = [
     ("Ars Technica", "https://feeds.arstechnica.com/arstechnica/index", "ai", r"\b(ai|local models?|gpu|rtx|ollama|automation|agents?|microsoft)\b"),
     ("The Record", "https://therecord.media/feed", "cyber", None),
     ("BleepingComputer", "https://www.bleepingcomputer.com/feed/", "cyber", None),
-    ("KCUR", "https://www.kcur.org/feed", "kc", r"\b(kansas city|missouri|kansas|lee.s summit|jackson county|independence|business|housing|transportation|jobs|election)\b"),
     ("Startland News", "https://startlandnews.com/feed/", "kc", None),
     ("NPR Business", "https://feeds.npr.org/1006/rss.xml", "business", None),
-    ("WSJ Markets", "https://feeds.a.dj.com/rss/RSSMarketsMain.xml", "business", None),
     ("NPR Politics", "https://feeds.npr.org/1014/rss.xml", "policy", None),
     ("Hackaday", "https://hackaday.com/blog/feed/", "maker", r"\b(laser|cut|cnc|print|design|cad|wood|electronics|robot|project|build|repair|microcontroller|maker)\b"),
     ("Make:", "https://makezine.com/feed/", "maker", None),
     ("The Verge", "https://www.theverge.com/rss/index.xml", "home", r"\b(smart|home|google|amazon|wifi|wi-fi|router|matter|security|robot|appliance|iot|nest|ring|gadgets|device)\b"),
-    ("Epic Gardening", "https://www.epicgardening.com/feed/", "garden", None),
     ("Savvy Gardening", "https://savvygardening.com/feed/", "garden", None),
     ("Missouri Independent", "https://missouriindependent.com/feed/", "kc", r"\b(missouri|kansas city|state|property|business|housing|legislature)\b"),
     ("Missourinet", "https://www.missourinet.com/feed/", "kc", None),
@@ -55,7 +52,6 @@ FEEDS = [
     ("BBC Technology", "https://feeds.bbci.co.uk/news/technology/rss.xml", "ai", r"\b(ai|tech|software|chips|computer|cyber|robot|agents?)\b"),
     ("The Register", "https://www.theregister.com/headlines.atom", "cyber", r"\b(security|attack|breach|vulnerability|regulation|audit|cloud|ai|data)\b"),
     ("EFF", "https://www.eff.org/rss/updates.xml", "cyber", r"\b(privacy|security|ai|surveillance|policy|law|encryption|right)\b"),
-    ("NPR Science", "https://feeds.npr.org/1007/rss.xml", "garden", r"\b(garden|soil|climate|food|agriculture|trees|biodiversity|wildlife)\b"),
     ("BBC Business", "https://feeds.bbci.co.uk/news/business/rss.xml", "business", None),
     ("Guardian Business", "https://www.theguardian.com/us/business/rss", "business", None),
     ("PBS Politics", "https://www.pbs.org/newshour/feeds/rss/politics", "policy", None),
@@ -70,9 +66,6 @@ FEEDS = [
     ("Guardian US News", "https://www.theguardian.com/us-news/rss", "policy", r"\b(congress|federal|government|election|policy|economy|court|regulation|infrastructure)\b"),
     ("Garden Betty", "https://gardenbetty.com/feed/", "garden", None),
     ("Fine Gardening", "https://www.finegardening.com/feed", "garden", None),
-    ("ScienceDaily Agriculture", "https://www.sciencedaily.com/rss/plants_animals/agriculture.xml", "garden", r"\b(agriculture|plant|garden|soil|crop|food|farming|grass)\b"),
-    ("Wood Magazine", "https://www.woodmagazine.com/rss.xml", "maker", r"\b(wood|laser|cnc|joinery|router|shop|tool|build|workshop)\b"),
-    ("The Oatmeal", "https://theoatmeal.com/feed/rss", "comics", None),
     ("SMBC", "https://www.smbc-comics.com/comic/rss", "comics", None),
     ("Kansas City Magazine", "https://kansascitymag.com/feed/", "kc", None),
     ("Flatland KC", "https://flatlandkc.org/feed/", "kc", None),
@@ -355,6 +348,9 @@ def main():
     except (OSError, ValueError):
         pass
     attach_evidence(selected, stories)
+    verified = sum(1 for article in selected if article.get("corroboration"))
+    print(f"Independent headline corroboration: {verified} of {len(selected)} candidate stories")
+    print("Source categories: " + str({topic: sum(1 for x in selected if x.get("catKey") == topic) for topic in TOPICS}))
     selected.sort(key=lambda x: (x.get("score", 0), x.get("date", "")), reverse=True)
     payload = {
         "updated_at": now.astimezone(CENTRAL).isoformat(timespec="seconds"),
