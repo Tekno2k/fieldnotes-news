@@ -366,7 +366,24 @@ def main():
         by_topic[item["catKey"]].append(item)
     selected = []
     for category in TOPICS:
-        selected.extend(by_topic[category][:6 if category in ("ai", "cyber", "maker", "property", "garden", "kc") else 4])
+        desired = 6 if category in ("ai", "cyber", "maker", "property", "garden", "kc") else 4
+        choices = []
+        source_counts = {}
+        for story in by_topic[category]:
+            publisher = story["source"]
+            if source_counts.get(publisher, 0) >= 2:
+                continue
+            choices.append(story)
+            source_counts[publisher] = source_counts.get(publisher, 0) + 1
+            if len(choices) >= desired:
+                break
+        if len(choices) < desired:
+            for story in by_topic[category]:
+                if story not in choices:
+                    choices.append(story)
+                if len(choices) >= desired:
+                    break
+        selected.extend(choices)
     if len(selected) < 5:
         print("Not enough current publisher stories; retaining existing snapshot", file=sys.stderr)
         return 3
@@ -384,6 +401,8 @@ def main():
     attach_evidence(selected, stories)
     verified = sum(1 for article in selected if article.get("corroboration"))
     print(f"Independent headline corroboration: {verified} of {len(selected)} candidate stories")
+    print(f"Selected publisher diversity: {len(set(x['source'] for x in selected))} publishers; publisher images: {sum(bool(x.get('image')) for x in selected)}")
+    print(f"Related cross-source coverage: {sum(bool(x.get('related_coverage')) for x in selected)} stories")
     print("Source categories: " + str({topic: sum(1 for x in selected if x.get("catKey") == topic) for topic in TOPICS}))
     selected.sort(key=lambda x: (x.get("score", 0), x.get("date", "")), reverse=True)
     payload = {
