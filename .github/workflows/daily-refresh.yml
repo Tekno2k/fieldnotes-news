@@ -1,0 +1,50 @@
+name: Fieldnotes Daily News Refresh
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 8 * * *'
+      timezone: 'America/Chicago'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: fieldnotes-pages
+  cancel-in-progress: false
+
+jobs:
+  refresh-and-publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out Fieldnotes
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Collect fresh publisher stories
+        run: |
+          python scripts/update_feed.py || echo "Feeds unavailable; retaining saved snapshot."
+      - name: Assemble public site
+        run: |
+          mkdir -p public/data
+          cp index.html public/index.html
+          cp data/latest.json public/data/latest.json
+          touch public/.nojekyll
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Upload web files
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: public
+      - name: Deploy homepage
+        id: deployment
+        uses: actions/deploy-pages@v4
