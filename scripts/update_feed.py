@@ -46,13 +46,11 @@ FEEDS = [
     ("NPR Politics", "https://feeds.npr.org/1014/rss.xml", "policy", None),
     ("Hackaday", "https://hackaday.com/blog/feed/", "maker", r"\b(laser|cut|cnc|print|design|cad|wood|electronics|robot|project|build|repair|microcontroller|maker)\b"),
     ("Make:", "https://makezine.com/feed/", "maker", None),
-    ("The Verge", "https://www.theverge.com/rss/index.xml", "home", r"\b(smart home|wifi|wi-fi|router|matter|thread|home automation|security|robot vacuum|appliance|mesh|iot)\b"),
+    ("The Verge", "https://www.theverge.com/rss/index.xml", "home", r"\b(smart|home|google|amazon|wifi|wi-fi|router|matter|security|robot|appliance|iot|nest|ring|gadgets|device)\b"),
     ("Epic Gardening", "https://www.epicgardening.com/feed/", "garden", None),
     ("Savvy Gardening", "https://savvygardening.com/feed/", "garden", None),
-    ("The Spruce", "https://www.thespruce.com/rss", "garden", r"\b(garden|seed|soil|vegetable|plant|compost|yard|tree)\b"),
     ("Missouri Independent", "https://missouriindependent.com/feed/", "kc", r"\b(missouri|kansas city|state|property|business|housing|legislature)\b"),
     ("Missourinet", "https://www.missourinet.com/feed/", "kc", None),
-    ("The Beacon", "https://thebeaconnews.org/stories/feed/", "kc", None),
     ("NPR Technology", "https://feeds.npr.org/1019/rss.xml", "ai", r"\b(ai|technology|software|computer|robot|chips|models?|internet)\b"),
     ("BBC Technology", "https://feeds.bbci.co.uk/news/technology/rss.xml", "ai", r"\b(ai|tech|software|chips|computer|cyber|robot|agents?)\b"),
     ("The Register", "https://www.theregister.com/headlines.atom", "cyber", r"\b(security|attack|breach|vulnerability|regulation|audit|cloud|ai|data)\b"),
@@ -64,11 +62,20 @@ FEEDS = [
     ("BBC US News", "https://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml", "policy", r"\b(congress|federal|election|policy|government|politics|regulation|infrastructure|trade)\b"),
     ("Family Handyman", "https://www.familyhandyman.com/feed/", "property", None),
     ("Bob Vila", "https://www.bobvila.com/feed/", "property", None),
-    ("This Old House", "https://www.thisoldhouse.com/rss/index.xml", "property", None),
     ("Fine Homebuilding", "https://www.finehomebuilding.com/feed", "property", None),
-    ("The Spruce Home", "https://www.thespruce.com/rss", "property", r"\b(deck|water|floor|roof|yard|house|repair|fence|plumbing|electric|hvac|basement|landscap|home)\b"),
     ("xkcd", "https://xkcd.com/rss.xml", "comics", None),
-    ("Poorly Drawn Lines", "https://poorlydrawnlines.com/feed/", "comics", None),
+    ("Engadget", "https://www.engadget.com/rss.xml", "home", r"\b(home|smart|wi.?fi|router|device|robot|matter|appliance|camera|network|gadgets?|homepod|doorbell)\b"),
+    ("Tom's Hardware", "https://www.tomshardware.com/feeds/all", "ai", r"\b(ai|nvidia|gpu|rtx|local|processor|computer|model|ram|memory|pc)\b"),
+    ("Guardian Technology", "https://www.theguardian.com/us/technology/rss", "ai", r"\b(ai|model|security|computing|chips|technology|internet)\b"),
+    ("Guardian US News", "https://www.theguardian.com/us-news/rss", "policy", r"\b(congress|federal|government|election|policy|economy|court|regulation|infrastructure)\b"),
+    ("Garden Betty", "https://gardenbetty.com/feed/", "garden", None),
+    ("Fine Gardening", "https://www.finegardening.com/feed", "garden", None),
+    ("ScienceDaily Agriculture", "https://www.sciencedaily.com/rss/plants_animals/agriculture.xml", "garden", r"\b(agriculture|plant|garden|soil|crop|food|farming|grass)\b"),
+    ("Wood Magazine", "https://www.woodmagazine.com/rss.xml", "maker", r"\b(wood|laser|cnc|joinery|router|shop|tool|build|workshop)\b"),
+    ("The Oatmeal", "https://theoatmeal.com/feed/rss", "comics", None),
+    ("SMBC", "https://www.smbc-comics.com/comic/rss", "comics", None),
+    ("Kansas City Magazine", "https://kansascitymag.com/feed/", "kc", None),
+    ("Flatland KC", "https://flatlandkc.org/feed/", "kc", None),
 ]
 WHY = {
     "ai": "Relevant to your interest in Ollama, Windows AI agents, local computing, and hardware upgrades.",
@@ -188,9 +195,9 @@ def same_story(a, b):
     return len(intersection) >= 3 and len(intersection) / max(1, min(len(one), len(two))) >= 0.60
 
 
-def attach_evidence(stories):
+def attach_evidence(stories, candidates):
     for item in stories:
-        peers = [other for other in stories if other["url"] != item["url"] and same_story(item, other)]
+        peers = [other for other in candidates if other["url"] != item["url"] and same_story(item, other)]
         seen = {item["source"]}
         unique = []
         for p in sorted(peers, key=lambda p: p["score"], reverse=True):
@@ -223,6 +230,35 @@ def repair_xml(body):
     return raw
 
 
+
+def parse_lenient(body):
+    """Use tolerant feedparser if installed, preserving linked publisher images."""
+    try:
+        import feedparser
+    except ImportError:
+        return ET.fromstring(repair_xml(body))
+    parsed = feedparser.parse(body)
+    if not parsed.entries:
+        raise ET.ParseError("No readable entries in malformed publisher response")
+    root = ET.Element("rss")
+    for record in parsed.entries:
+        item = ET.SubElement(root, "item")
+        for tag, key in (("title", "title"), ("description", "summary"),
+                         ("link", "link"), ("pubDate", "published"),
+                         ("updated", "updated")):
+            value = record.get(key)
+            if value:
+                ET.SubElement(item, tag).text = str(value)
+        for candidate in (record.get("media_thumbnail", []) +
+                          record.get("media_content", []) +
+                          record.get("enclosures", [])):
+            url = candidate.get("url") or candidate.get("href")
+            if url and str(url).startswith("https://"):
+                ET.SubElement(item, "enclosure", {"url": str(url),
+                    "type": candidate.get("type", "image/jpeg")})
+                break
+    return root
+
 def read_publisher(name, url, category, pattern, now):
     req = urllib.request.Request(url, headers={
         "User-Agent": "FieldnotesNewsReader/1.0 (personal RSS reader)",
@@ -233,7 +269,7 @@ def read_publisher(name, url, category, pattern, now):
     try:
         root = ET.fromstring(body)
     except ET.ParseError:
-        root = ET.fromstring(repair_xml(body))
+        root = parse_lenient(body)
     entries = [e for e in root.iter() if e.tag.rsplit("}", 1)[-1].lower() in ("item", "entry")]
     result = []
     for entry in entries[:35]:
@@ -318,7 +354,7 @@ def main():
                 selected.append(guide)
     except (OSError, ValueError):
         pass
-    attach_evidence(selected)
+    attach_evidence(selected, stories)
     selected.sort(key=lambda x: (x.get("score", 0), x.get("date", "")), reverse=True)
     payload = {
         "updated_at": now.astimezone(CENTRAL).isoformat(timespec="seconds"),
