@@ -44,7 +44,7 @@ FEEDS = [
     ("Hackaday", "https://hackaday.com/blog/feed/", "maker", r"\b(laser|cut|cnc|print|design|cad|wood|electronics|robot|project|build|repair|microcontroller|maker)\b"),
     ("Make:", "https://makezine.com/feed/", "maker", None),
     ("The Verge", "https://www.theverge.com/rss/index.xml", "home", r"\b(smart home|wifi|wi-fi|router|matter|thread|home automation|security|robot vacuum|appliance|mesh|iot)\b"),
-    ("Joe Gardener", "https://joegardener.com/feed/", "garden", r"\b(garden|soil|compost|seed|plant|vegetable|harvest|homestead|greenhouse|mulch)\b"),
+    ("Epic Gardening", "https://www.epicgardening.com/feed/", "garden", r"\b(garden|soil|compost|seed|plant|vegetable|harvest|homestead|greenhouse|mulch)\b"),
 ]
 WHY = {
     "ai": "Relevant to your interest in Ollama, Windows AI agents, local computing, and hardware upgrades.",
