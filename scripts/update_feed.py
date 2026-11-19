@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import urllib.request
 import xml.etree.ElementTree as ET
 from zoneinfo import ZoneInfo
@@ -27,6 +28,8 @@ TOPICS = {
     "maker": "Maker Lab",
     "home": "Smart Home",
     "garden": "Homestead & Garden",
+    "property": "Home & 2-Acre Property",
+    "comics": "Comics",
 }
 # Each source is a publisher feed, not a scraped search result.
 # A matching pattern is optional; it limits broad publications to pertinent stories.
@@ -44,7 +47,28 @@ FEEDS = [
     ("Hackaday", "https://hackaday.com/blog/feed/", "maker", r"\b(laser|cut|cnc|print|design|cad|wood|electronics|robot|project|build|repair|microcontroller|maker)\b"),
     ("Make:", "https://makezine.com/feed/", "maker", None),
     ("The Verge", "https://www.theverge.com/rss/index.xml", "home", r"\b(smart home|wifi|wi-fi|router|matter|thread|home automation|security|robot vacuum|appliance|mesh|iot)\b"),
-    ("Epic Gardening", "https://www.epicgardening.com/feed/", "garden", r"\b(garden|soil|compost|seed|plant|vegetable|harvest|homestead|greenhouse|mulch)\b"),
+    ("Epic Gardening", "https://www.epicgardening.com/feed/", "garden", None),
+    ("Savvy Gardening", "https://savvygardening.com/feed/", "garden", None),
+    ("The Spruce", "https://www.thespruce.com/rss", "garden", r"\b(garden|seed|soil|vegetable|plant|compost|yard|tree)\b"),
+    ("Missouri Independent", "https://missouriindependent.com/feed/", "kc", r"\b(missouri|kansas city|state|property|business|housing|legislature)\b"),
+    ("Missourinet", "https://www.missourinet.com/feed/", "kc", None),
+    ("The Beacon", "https://thebeaconnews.org/stories/feed/", "kc", None),
+    ("NPR Technology", "https://feeds.npr.org/1019/rss.xml", "ai", r"\b(ai|technology|software|computer|robot|chips|models?|internet)\b"),
+    ("BBC Technology", "https://feeds.bbci.co.uk/news/technology/rss.xml", "ai", r"\b(ai|tech|software|chips|computer|cyber|robot|agents?)\b"),
+    ("The Register", "https://www.theregister.com/headlines.atom", "cyber", r"\b(security|attack|breach|vulnerability|regulation|audit|cloud|ai|data)\b"),
+    ("EFF", "https://www.eff.org/rss/updates.xml", "cyber", r"\b(privacy|security|ai|surveillance|policy|law|encryption|right)\b"),
+    ("NPR Science", "https://feeds.npr.org/1007/rss.xml", "garden", r"\b(garden|soil|climate|food|agriculture|trees|biodiversity|wildlife)\b"),
+    ("BBC Business", "https://feeds.bbci.co.uk/news/business/rss.xml", "business", None),
+    ("Guardian Business", "https://www.theguardian.com/us/business/rss", "business", None),
+    ("PBS Politics", "https://www.pbs.org/newshour/feeds/rss/politics", "policy", None),
+    ("BBC US News", "https://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml", "policy", r"\b(congress|federal|election|policy|government|politics|regulation|infrastructure|trade)\b"),
+    ("Family Handyman", "https://www.familyhandyman.com/feed/", "property", None),
+    ("Bob Vila", "https://www.bobvila.com/feed/", "property", None),
+    ("This Old House", "https://www.thisoldhouse.com/rss/index.xml", "property", None),
+    ("Fine Homebuilding", "https://www.finehomebuilding.com/feed", "property", None),
+    ("The Spruce Home", "https://www.thespruce.com/rss", "property", r"\b(deck|water|floor|roof|yard|house|repair|fence|plumbing|electric|hvac|basement|landscap|home)\b"),
+    ("xkcd", "https://xkcd.com/rss.xml", "comics", None),
+    ("Poorly Drawn Lines", "https://poorlydrawnlines.com/feed/", "comics", None),
 ]
 WHY = {
     "ai": "Relevant to your interest in Ollama, Windows AI agents, local computing, and hardware upgrades.",
@@ -55,13 +79,16 @@ WHY = {
     "maker": "Potentially useful for laser-cutting, vector design, fabrication, and a maker business.",
     "home": "Relevant to practical smart-home networking, IoT systems, appliances, and product reliability.",
     "garden": "Practical homesteading and gardening ideas; compare timing with western Missouri seasons.",
+    "property": "Home and land ideas for your house and two-acre property: drainage, deck, HVAC, outdoor Wi-Fi, trees, soil and maintenance.",
+    "comics": "A quick entertaining break between practical stories, from the original artist.",
 }
-AGE_LIMIT = {"garden": 50, "maker": 21, "home": 14}
+AGE_LIMIT = {"garden": 90, "maker": 45, "home": 30, "property": 90, "comics": 30, "kc": 14, "ai": 12, "cyber": 14, "business": 14, "policy": 14}
 FEATURED = [
     (r"\b(ollama|on-device|local llm|nvidia|rtx|gpu)\b", "ai", "Worth checking against the local AI setup and GPU upgrades you've been evaluating."),
     (r"\b(ai governance|ai agents?|nist|audit|compliance|security framework)\b", "cyber", "Especially relevant to moving into GRC and AI compliance work."),
     (r"\b(laser cut|lightburn|cnc|vector)\b", "maker", "Could help with design workflows or equipment for your laser-cutting business."),
     (r"\b(compost|mulch|soil|seed|harvest)\b", "garden", "A hands-on gardening or soil-improvement idea to consider for a Missouri homestead."),
+    (r"\b(deck|basement|water pressure|drainage|gutters|trees|fencing|septic|hvac|insulation|acreage|property|roof|mold)\b", "property", "A practical repair, upkeep or improvement to evaluate for your house and two acres."),
 ]
 
 class Stripper(HTMLParser):
@@ -110,6 +137,92 @@ def article_date(elem):
             return None
     return parsed.replace(tzinfo=dt.timezone.utc) if parsed.tzinfo is None else parsed
 
+def source_image(entry):
+    # Prefer media attachments explicitly syndicated by the publisher.
+    for sub in entry.iter():
+        tag = sub.tag.rsplit("}", 1)[-1].lower()
+        if tag in ("thumbnail", "content", "enclosure", "image"):
+            url = (sub.get("url") or sub.get("href") or "").strip()
+            mime = (sub.get("type") or "").lower()
+            if url.startswith("https://") and (tag == "thumbnail" or "image/" in mime or re.search(r"\.(?:jpe?g|png|webp)(?:\?|$)", url, re.I)):
+                return url
+    raw = element_text(entry, "description") or element_text(entry, "summary") or element_text(entry, "content")
+    match = re.search(r"<img\b[^>]*\bsrc\s*=\s*['\"](https://[^'\"]+)['\"]", html.unescape(raw or ""), re.I)
+    return html.unescape(match.group(1)) if match else None
+
+
+def topical_relevance(category, title, summary, age):
+    weights = {"ai": 19, "cyber": 18, "kc": 16, "business": 11,
+               "policy": 9, "maker": 22, "home": 15, "garden": 14,
+               "property": 24, "comics": 7}
+    # Personalized topical keywords get priority over mere recency.
+    needles = [
+        (r"\b(ollama|local ai|on.device|agents?|rtx|gpu|ai governance|cybersecurity|grc|compliance|nist)\b", 14),
+        (r"\b(laser|lightburn|vector|cnc|cad|woodwork|fabricat|3d print)\b", 16),
+        (r"\b(kansas city|lee.s summit|missouri|independence|jackson county)\b", 11),
+        (r"\b(deck|basement|drainage|well|septic|yard|tree|fence|roof|hvac|wifi|wi.fi|iot|acreage|acre)\b", 14),
+        (r"\b(compost|seed|soil|raised bed|homestead|garden|harvest|vegetable|irrigat)\b", 11),
+    ]
+    combined = title + " " + summary
+    bonus = sum(weight for regex, weight in needles if re.search(regex, combined, re.I))
+    return min(100, max(20, round(55 + weights[category] + min(bonus, 22) - min(max(age, 0), 35) * 0.6)))
+
+
+def headline_terms(headline):
+    stop = {"about","after","ahead","against","also","amid","another","around","been",
+            "before","could","first","from","have","into","more","over","says",
+            "than","that","their","there","these","this","through","under",
+            "using","when","where","which","while","will","with","would",
+            "news","report","update","latest","today","what","your","says"}
+    return {w for w in re.findall(r"[a-z0-9]+", headline.lower())
+            if len(w) > 3 and w not in stop}
+
+
+def same_story(a, b):
+    if a["source"] == b["source"] or a["catKey"] != b["catKey"]:
+        return False
+    if abs((dt.date.fromisoformat(a["date"]) - dt.date.fromisoformat(b["date"])).days) > 4:
+        return False
+    one, two = headline_terms(a["headline"]), headline_terms(b["headline"])
+    intersection = one & two
+    return len(intersection) >= 3 and len(intersection) / max(1, min(len(one), len(two))) >= 0.60
+
+
+def attach_evidence(stories):
+    for item in stories:
+        peers = [other for other in stories if other["url"] != item["url"] and same_story(item, other)]
+        seen = {item["source"]}
+        unique = []
+        for p in sorted(peers, key=lambda p: p["score"], reverse=True):
+            if p["source"] not in seen:
+                unique.append({"source": p["source"], "headline": p["headline"], "url": p["url"]})
+                seen.add(p["source"])
+            if len(unique) == 4:
+                break
+        item["corroboration"] = unique
+        num = len(unique)
+        # Score is an evidence-coverage rubric, NOT a measured chance of truth.
+        item["confidence_pct"] = min(92, 55 + (20 if num else 0) + max(0, num - 1) * 7)
+        item["confidence_basis"] = (
+            f"{num + 1} publisher(s) with closely matching headlines; "
+            "automated headline comparison only; underlying claims not independently fact-checked."
+        )
+        item["perspective_note"] = (
+            "Review independent reporting for framing or disagreement; "
+            "matching headlines alone do not prove agreement."
+        ) if num else "Single syndicated account; independent confirmation has not been located."
+    return stories
+
+
+def repair_xml(body):
+    # Repair invalid HTML entities embedded in imperfect RSS without silently
+    # treating entire HTML pages as valid XML.
+    raw = body.decode("utf-8", "replace")
+    raw = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", raw)
+    raw = re.sub(r"&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)", "&amp;", raw)
+    return raw
+
+
 def read_publisher(name, url, category, pattern, now):
     req = urllib.request.Request(url, headers={
         "User-Agent": "FieldnotesNewsReader/1.0 (personal RSS reader)",
@@ -117,7 +230,10 @@ def read_publisher(name, url, category, pattern, now):
     })
     with urllib.request.urlopen(req, timeout=15) as resp:
         body = resp.read(1_250_000)
-    root = ET.fromstring(body)
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError:
+        root = ET.fromstring(repair_xml(body))
     entries = [e for e in root.iter() if e.tag.rsplit("}", 1)[-1].lower() in ("item", "entry")]
     result = []
     for entry in entries[:35]:
@@ -131,7 +247,7 @@ def read_publisher(name, url, category, pattern, now):
         age = (now - date.astimezone(dt.timezone.utc)).total_seconds() / 86400
         if age < -0.1 or age > AGE_LIMIT.get(category, 7):
             continue
-        summary = plain(element_text(entry, "description") or element_text(entry, "summary") or element_text(entry, "content"), 180)
+        summary = plain(element_text(entry, "description") or element_text(entry, "summary") or element_text(entry, "content"), 210)
         if pattern and not re.search(pattern, title + " " + summary, flags=re.I):
             continue
         if not summary:
@@ -143,10 +259,11 @@ def read_publisher(name, url, category, pattern, now):
                 break
         result.append({
             "id": "rss-" + hashlib.sha1(url.encode()).hexdigest()[:13],
-            "category": TOPICS[category], "kind": "News",
+            "category": TOPICS[category], "kind": "Comic" if category == "comics" else "News",
             "date": date.astimezone(CENTRAL).date().isoformat(),
             "source": name, "headline": title, "summary": summary,
-            "why": why, "url": url, "score": max(40, round(95 - 3 * max(0, age))),
+            "why": why, "url": url, "score": topical_relevance(category, title, summary, age),
+            "image": source_image(entry),
             "read": 4, "tag": "Publisher RSS", "note": "RSS summary; read original reporting",
             "catKey": category,
         })
@@ -156,14 +273,25 @@ def main():
     now = dt.datetime.now(dt.timezone.utc)
     stories = []
     successful_sources = 0
-    for name, feed, category, pattern in FEEDS:
-        try:
-            batch = read_publisher(name, feed, category, pattern, now)
-            stories.extend(batch)
-            successful_sources += 1
-            print(f"OK {name}: {len(batch)} matching items")
-        except Exception as exc:
-            print(f"WARN {name}: {type(exc).__name__}: {exc}", file=sys.stderr)
+    feed_health = []
+    # Slow/invalid publisher feeds no longer stall all the other categories.
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        calls = {
+            pool.submit(read_publisher, name, feed, cat, pattern, now): (name, cat)
+            for name, feed, cat, pattern in FEEDS
+        }
+        for task in as_completed(calls):
+            name, category = calls[task]
+            try:
+                batch = task.result()
+                stories.extend(batch)
+                successful_sources += 1
+                status = "ok" if batch else "no_matching_recent_articles"
+                feed_health.append({"source": name, "category": category, "status": status, "articles": len(batch)})
+                print(f"OK {name}: {len(batch)} matching items")
+            except Exception as exc:
+                feed_health.append({"source": name, "category": category, "status": "failed", "articles": 0})
+                print(f"WARN {name}: {type(exc).__name__}: {exc}", file=sys.stderr)
     # Keep old content if feed availability is too low; do not invent freshness.
     keys = set()
     by_topic = {key: [] for key in TOPICS}
@@ -175,7 +303,7 @@ def main():
         by_topic[item["catKey"]].append(item)
     selected = []
     for category in TOPICS:
-        selected.extend(by_topic[category][:5])
+        selected.extend(by_topic[category][:6 if category in ("ai", "cyber", "maker", "property", "garden", "kc") else 4])
     if len(selected) < 5:
         print("Not enough current publisher stories; retaining existing snapshot", file=sys.stderr)
         return 3
@@ -183,17 +311,21 @@ def main():
         existing = json.loads(DEST.read_text(encoding="utf-8"))
         old_guides = [
             x for x in existing.get("stories", [])
-            if x.get("kind") == "Guide" and x.get("catKey") in ("garden", "maker")
+            if x.get("kind") == "Guide" and x.get("catKey") in ("garden", "maker", "property")
         ]
         for guide in old_guides:
             if guide.get("url") not in {story["url"] for story in selected}:
                 selected.append(guide)
     except (OSError, ValueError):
         pass
+    attach_evidence(selected)
     selected.sort(key=lambda x: (x.get("score", 0), x.get("date", "")), reverse=True)
     payload = {
         "updated_at": now.astimezone(CENTRAL).isoformat(timespec="seconds"),
-        "mode": "rss", "source_count": successful_sources, "stories": selected[:45],
+        "mode": "rss", "source_count": successful_sources,
+        "feed_count": len(FEEDS), "feed_health": sorted(feed_health, key=lambda x: x["source"]),
+        "evidence_method": "Heuristic strength of independent headline-level corroboration. The displayed confidence percentage is NOT a measured probability that an article or its claims are true.",
+        "stories": selected[:64],
     }
     DEST.parent.mkdir(parents=True, exist_ok=True)
     temp = DEST.with_suffix(".json.tmp")
