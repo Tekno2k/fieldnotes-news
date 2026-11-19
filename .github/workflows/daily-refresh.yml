@@ -30,6 +30,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Validate site and install resilient RSS parser
+        run: |
+          python -m pip install --disable-pip-version-check "feedparser==6.0.12"
+          python -m py_compile scripts/update_feed.py
+          node --check enhancements.js
       - name: Collect fresh publisher stories
         run: |
           python scripts/update_feed.py || echo "Feeds unavailable; retaining saved snapshot."
