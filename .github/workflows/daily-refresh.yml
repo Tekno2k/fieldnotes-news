@@ -37,6 +37,8 @@ jobs:
         run: |
           mkdir -p public/data
           cp index.html public/index.html
+          cp reader.css public/reader.css
+          cp enhancements.js public/enhancements.js
           cp data/latest.json public/data/latest.json
           touch public/.nojekyll
       - name: Configure GitHub Pages
