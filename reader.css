@@ -1,0 +1,33 @@
+/* Fieldnotes reader accessibility, evidence and home/acreage layout */
+body{font-size:17px;line-height:1.62}
+.top-inner{min-height:76px}.brand{font-size:28px}
+.topic-btn{font-size:15px;line-height:1.45;padding:12px 11px}
+.slabel{font-size:12px}.headline{font-size:clamp(33px,3.5vw,47px)}
+.lead{font-size:17px}.kicker,.status{font-size:13px}
+.feature p{font-size:16px;line-height:1.6}.feature h2{font-size:clamp(25px,3vw,34px)}
+.feature a{font-size:15px}.story h3{font-size:21px;line-height:1.35}
+.story p{font-size:15px;line-height:1.58}.story .meta{font-size:13px}
+.pill{font-size:12px}.why{font-size:15px;line-height:1.5}
+.why strong{font-size:13px}.story-bottom a,.story-bottom small{font-size:13px}
+.story-section-title h2,.section-header h2{font-size:24px}
+.project b{font-size:17px}.project p,.project a,.section p.intro{font-size:15px}
+.panel p,.task,.resource,.smalllink{font-size:14px}
+.foot{font-size:13px}.btn{font-size:15px}
+.article-image{width:100%;height:180px;object-fit:cover;border-radius:11px;background:#e7ece5;display:block}
+.evidence-row{margin:7px 0 4px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.evidence-score{border:1px solid #bfd2c5;background:#eff8f0;border-radius:8px;color:#225942;font-weight:750;font-size:12px;padding:5px 8px}
+.evidence-note{background:#eaf1ea;border-left:4px solid #337153;padding:13px 16px;margin:12px 0 20px;border-radius:0 9px 9px 0;color:#3d5f4d;font-size:14px}
+.reporting-links{font-size:13px;background:#f8f9f6;border-radius:9px;padding:9px 11px;line-height:1.5}
+.reporting-links strong{display:block;font-size:13px;margin-bottom:6px}
+.reporting-links a{display:inline-block;margin:0 11px 4px 0;text-decoration:underline;color:#1b6146}
+.comic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.comic-item{border:1px solid var(--line);background:#fff;border-radius:13px;padding:15px}
+.comic-item img{max-width:100%;max-height:260px;object-fit:contain;display:block;margin:10px auto}
+.comic-item h3{font-size:18px;margin:3px 0 5px}.comic-item a{font-weight:700;text-decoration:underline;color:var(--green)}
+#feedHealth{font-size:13px;color:var(--sub);line-height:1.5;margin:10px 0}
+#feedHealth summary{cursor:pointer}
+@media(max-width:760px){body{font-size:17px}.cards,.comic-grid{grid-template-columns:1fr}
+.story h3{font-size:22px}.story p,.why{font-size:16px}.story{padding:17px}
+.mobile-topics button{font-size:14px;padding:10px 13px}.hero .status{font-size:14px}
+.feature p{font-size:17px}.project-grid{grid-template-columns:1fr}
+}
