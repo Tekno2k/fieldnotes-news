@@ -13,6 +13,7 @@ import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import urllib.request
+import urllib.parse
 import xml.etree.ElementTree as ET
 from zoneinfo import ZoneInfo
 
@@ -185,12 +186,19 @@ def same_story(a, b):
         return False
     one, two = headline_terms(a["headline"]), headline_terms(b["headline"])
     intersection = one & two
-    return len(intersection) >= 3 and len(intersection) / max(1, min(len(one), len(two))) >= 0.60
+    return len(intersection) >= 3 and len(intersection) / max(1, min(len(one), len(two))) >= 0.48
 
 
 def attach_evidence(stories, candidates):
     for item in stories:
-        peers = [other for other in candidates if other["url"] != item["url"] and same_story(item, other)]
+        if item.get("kind") in ("Comic", "Guide"):
+            item["confidence_pct"] = None
+            item["corroboration"] = []
+            item["related_coverage"] = []
+            item["confidence_basis"] = "Not scored: creative content or practical guide."
+            continue
+        peers = [other for other in candidates
+                 if other["url"] != item["url"] and same_story(item, other)]
         seen = {item["source"]}
         unique = []
         for p in sorted(peers, key=lambda p: p["score"], reverse=True):
@@ -201,16 +209,42 @@ def attach_evidence(stories, candidates):
                 break
         item["corroboration"] = unique
         num = len(unique)
-        # Score is an evidence-coverage rubric, NOT a measured chance of truth.
-        item["confidence_pct"] = min(92, 55 + (20 if num else 0) + max(0, num - 1) * 7)
+        # This is a source-corroboration rubric, NOT a measured probability
+        # that the story or any specific factual assertion is true.
+        item["confidence_pct"] = min(92, 35 + (37 if num else 0) + max(0, num - 1) * 9)
         item["confidence_basis"] = (
-            f"{num + 1} publisher(s) with closely matching headlines; "
-            "automated headline comparison only; underlying claims not independently fact-checked."
+            f"{num + 1} distinct feed publisher(s) with closely matching headlines; "
+            "headline-level comparison only; assertions have not been fact-checked."
         )
         item["perspective_note"] = (
-            "Review independent reporting for framing or disagreement; "
-            "matching headlines alone do not prove agreement."
-        ) if num else "Single syndicated account; independent confirmation has not been located."
+            "Check links for differences in framing and sources; aligned headlines "
+            "alone do not prove that every assertion agrees."
+        ) if num else "Only one publisher reported this headline in the feed; no automatic corroboration found."
+        # Other coverage can provide context or opposing perspectives; it is
+        # explicitly NOT scored as independent corroboration of this story.
+        related = []
+        for other in candidates:
+            if (other.get("source") == item.get("source") or
+                other.get("url") == item.get("url") or
+                other.get("catKey") != item.get("catKey") or
+                other.get("url") in {v["url"] for v in unique}):
+                continue
+            if abs((dt.date.fromisoformat(item["date"]) -
+                    dt.date.fromisoformat(other["date"])).days) > 7:
+                continue
+            common = headline_terms(item["headline"]) & headline_terms(other["headline"])
+            if len(common) < 2:
+                continue
+            related.append((len(common), other))
+        related.sort(key=lambda t: (t[0], t[1]["score"]), reverse=True)
+        item["related_coverage"] = [
+            {"source": other["source"], "headline": other["headline"], "url": other["url"]}
+            for _, other in related[:3]
+        ]
+        item["verification_search_url"] = (
+            "https://news.google.com/search?q=" +
+            urllib.parse.quote(item["headline"], safe="")
+        )
     return stories
 
 
@@ -356,7 +390,7 @@ def main():
         "updated_at": now.astimezone(CENTRAL).isoformat(timespec="seconds"),
         "mode": "rss", "source_count": successful_sources,
         "feed_count": len(FEEDS), "feed_health": sorted(feed_health, key=lambda x: x["source"]),
-        "evidence_method": "Heuristic strength of independent headline-level corroboration. The displayed confidence percentage is NOT a measured probability that an article or its claims are true.",
+        "evidence_method": "Heuristic headline-matching support from distinct publisher feeds. 35% denotes single-source reporting, NOT 35% probability of truth. These percentages are NOT independently verified probabilities that individual facts are correct.",
         "stories": selected[:64],
     }
     DEST.parent.mkdir(parents=True, exist_ok=True)
