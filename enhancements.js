@@ -87,16 +87,23 @@ function renderV2(){
     '<div class="evidence-row"><span class="evidence-score" title="'+safeText(item.confidence_basis||'Automated corroboration, not a truth probability')+'">'+
     'Evidence support '+Math.round(pct)+'%</span></div>':'';
   const supporting=Array.isArray(item.corroboration)?item.corroboration.filter(c=>urlOk(c.url)).slice(0,4):[];
+  const related=Array.isArray(item.related_coverage)?item.related_coverage.filter(c=>urlOk(c.url)).slice(0,3):[];
   const comparisons=supporting.length?
-    '<div class="reporting-links"><strong>Compare reporting &amp; viewpoints</strong>'+
+    '<div class="reporting-links"><strong>Close cross-publisher headline matches</strong>'+
      supporting.map(c=>'<a href="'+safeText(c.url)+'" target="_blank" rel="noopener noreferrer">'+safeText(c.source)+' ↗</a>').join('')+
-     '<div>Sources report on apparently similar events; differences in framing or conclusions should be checked in full articles.</div></div>':
-    '<div class="reporting-links">One feed publisher; independent corroboration not identified.</div>';
+     '<div>These headlines appear to cover the same event. Read the full articles for potential differences or disputes.</div></div>':
+    related.length?
+    '<div class="reporting-links"><strong>Related reporting and viewpoints (not verification)</strong>'+
+     related.map(c=>'<a href="'+safeText(c.url)+'" target="_blank" rel="noopener noreferrer">'+safeText(c.source)+' ↗</a>').join('')+
+     '<div>Related topics may offer another perspective but do not confirm this particular claim.</div></div>':
+    '<div class="reporting-links">Single publisher in this edition. Independent corroboration not identified.</div>';
+  const further=urlOk(item.verification_search_url)?
+    '<div class="reporting-links"><a href="'+safeText(item.verification_search_url)+'" target="_blank" rel="noopener noreferrer">Find other reporting on this headline ↗</a></div>':'';
   article.innerHTML='<div class="story-top"><div><span class="pill">'+safeText(item.category||'News')+'</span>'+
    '<div class="meta">'+safeText(item.source||'Publisher')+' · '+safeText(formatDate(item.date))+' · '+safeText(item.kind||'News')+'</div></div>'+
    '<button class="save '+(savedItem?'active':'')+'" type="button" aria-label="'+(savedItem?'Remove bookmark':'Save story')+'">'+(savedItem?'★':'☆')+'</button></div>'+
    image+'<h3>'+safeText(item.headline)+'</h3><p>'+safeText(item.summary)+'</p>'+confidence+
-   '<div class="why"><strong>Why it matters to you</strong>'+safeText(item.why)+'</div>'+comparisons+
+   '<div class="why"><strong>Why it matters to you</strong>'+safeText(item.why)+'</div>'+comparisons+further+
    '<div class="story-bottom"><small>'+safeText(item.note||item.tag||'Publisher RSS')+'</small>'+
    '<a href="'+safeText(src)+'" target="_blank" rel="noopener noreferrer">Read source ↗</a></div>';
   article.querySelector('.save').onclick=()=>{
@@ -153,7 +160,7 @@ function init(){
   const lead=document.querySelector('.hero');
   if(lead){
    const note=document.createElement('div');note.className='evidence-note';
-   note.innerHTML='<strong>Evidence scores ≠ probability of truth.</strong> A percentage indicates how many independent publisher headlines closely corroborate a story. Single-feed reporting is not independently confirmed here. For disputed stories, compare source links and framing.';
+   note.innerHTML='<strong>Evidence scores ≠ probability of truth.</strong> A percentage indicates how many distinct publisher headlines closely corroborate a story. Single-feed reporting is not independently confirmed here. For disputed stories, compare source links and framing.';
    lead.after(note);
   }
   const home=makeSection('propertySection','🏡 Home & Two-Acre Property',
