@@ -18,6 +18,7 @@ main{min-width:0}.kicker{font-size:11px;letter-spacing:1.6px;text-transform:uppe
 @media(max-width:760px){.top-inner{padding:10px 13px;min-height:60px}.brand{font-size:21px}.brand small{font-size:8px}.top-actions .btn{font-size:11px;padding:8px}.top-actions .hide-mobile{display:none}.layout{display:block;padding:19px 14px 45px}.left{display:none}.mobile-topics{display:flex;gap:7px;overflow-x:auto;padding:4px 0 11px;margin-bottom:13px}.mobile-topics button{white-space:nowrap;border:1px solid #dbe4d9;border-radius:99px;background:#fff;padding:8px 11px;font-size:12px}.mobile-topics button.active{background:#d9ebda;border-color:#b7d5ba;font-weight:750}.headline{font-size:31px}.hero{display:block}.status{text-align:left;margin-top:11px}.feature{min-height:190px;padding:20px}.cards{grid-template-columns:1fr}.project-grid{grid-template-columns:1fr}.toolbar select{max-width:none}.story h3{font-size:18px}}
 @media(prefers-reduced-motion:no-preference){.story{transition:box-shadow .18s,transform .18s}.story:hover{box-shadow:0 7px 28px #174e3c13;transform:translateY(-2px)}}
 </style>
+<link rel="stylesheet" href="./reader.css"/>
 </head>
 <body>
 <header class="top"><div class="top-inner"><div class="brand"><b>✳</b> fieldnotes<small>YOUR WORLD, IN FOCUS</small></div><div class="top-actions"><span id="statusBadge" class="badge warn">Curated snapshot</span><button class="btn hide-mobile" id="refreshBtn" type="button">↻ Check updates</button><button class="btn" id="savedBtn" type="button">☆ Saved <span id="savedCount">0</span></button></div></div></header>
@@ -91,4 +92,5 @@ function render(){nav();renderCards();feature();$('savedCount').textContent=save
 async function refresh(){if(location.protocol==='file:'){updateStatus();return}const btn=$('refreshBtn');btn.disabled=true;btn.textContent='↻ Checking…';try{const response=await fetch('./data/latest.json?cb='+Date.now(),{cache:'no-store'});if(!response.ok)throw Error('Status '+response.status);const data=await response.json();if(!Array.isArray(data.stories)||!data.stories.length)throw Error('No stories');STORIES=data.stories.filter(s=>s&&s.headline&&s.url);edition=data.updated_at||edition;feedMode=data.mode||'rss';render()}catch(e){$('updateLabel').textContent='Update unavailable · Showing last saved edition';console.warn('Fieldnotes feed refresh:',e)}finally{btn.disabled=false;btn.textContent='↻ Check updates'}}
 $('search').addEventListener('input',renderCards);$('sort').addEventListener('change',e=>{sortMode=e.target.value;renderCards()});$('savedBtn').onclick=()=>{showSaved=!showSaved;selected='all';render()};$('refreshBtn').onclick=refresh;projects();gardening();render();refresh();
 </script>
+<script src="./enhancements.js" defer></script>
 </body></html>
